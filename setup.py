@@ -15,8 +15,6 @@ setup(
     },
     author="Diaz",
     description="Material 3 wallpaper color scheme generator",
-    long_description=open('README.md').read(),
-    long_description_content_type="text/markdown",
     url="https://github.com/MDiaznf23/m3wal",
     classifiers=[
         "Programming Language :: Python :: 3",
