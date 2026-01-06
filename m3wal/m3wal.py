@@ -218,7 +218,7 @@ class M3WAL:
             "term15": scheme.surface_bright,  # Bright White
         }
 
-    def apply_all_templates(self, templates_dir="templates", output_dir=None):
+    def apply_all_templates(self, templates_dir=None, output_dir=None):
         """Apply colors to all templates in templates directory"""
         if not self.theme:
             raise ValueError("Generate scheme first!")
@@ -226,6 +226,15 @@ class M3WAL:
         if output_dir is None:
             output_dir = Path.home() / ".cache" / "m3-colors"
 
+        # Use package templates if not specified
+        if templates_dir is None:
+            try:
+                import pkg_resources
+                templates_dir = pkg_resources.resource_filename('m3wal', 'templates')
+            except:
+                # Fallback to config dir
+                templates_dir = Path.home() / ".config" / "m3-colors" / "templates"
+        
         templates_path = Path(templates_dir)
         output_path = Path(output_dir)
         output_path.mkdir(parents=True, exist_ok=True)
@@ -576,9 +585,8 @@ def main():
     print(f"\nExported to: {output}")
 
     # Apply to all templates
-    templates_dir = m3wal.config.get('Paths', 'templates_dir', fallback='templates')
     cache_dir = Path(m3wal.config.get('Paths', 'cache_dir', fallback='~/.cache/m3-colors')).expanduser()
-    generated_files = m3wal.apply_all_templates(templates_dir=templates_dir, output_dir=cache_dir)
+    generated_files = m3wal.apply_all_templates(output_dir=cache_dir)
 
     if generated_files:
         print(f"\n✨ Generated {len(generated_files)} config files")

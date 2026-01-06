@@ -4,6 +4,9 @@ setup(
     name="m3wal",
     version="1.0.0",
     packages=find_packages(),
+    package_data={
+        'm3wal': ['templates/*.template'],  # Include templates
+    },
     install_requires=[
         "material-color-utilities",
         "Pillow",
