@@ -257,9 +257,9 @@ class M3WAL:
             try:
                 self.apply_template(template_file, output_file)
                 generated_files.append(str(output_file))
-                print(f"  ✓ {template_file.name} → {output_file}")
+                print(f"✓ {template_file.name} → {output_file}")
             except Exception as e:
-                print(f"  ✗ {template_file.name}: {e}")
+                print(f"✗ {template_file.name}: {e}")
 
         return generated_files
 
@@ -277,7 +277,7 @@ class M3WAL:
     
         # Make new symlink 
         symlink_path.symlink_to(wallpaper_path)
-        print(f"  ✓ Created symlink → {symlink_path}")
+        print(f"Created symlink → {symlink_path}")
 
     def load_deploy_config(self):
         """Load deployment mappings from config"""
@@ -337,24 +337,20 @@ class M3WAL:
         xresources = Path.home() / ".cache" / "m3-colors" / "colors.Xresources"
         if xresources.exists():
             subprocess.run(["xrdb", "-merge", str(xresources)])
-            print(f"  ✓ Applied Xresources")
+            print(f"Applied Xresources")
 
     def export_json(self, output_path=None, variant="CONTENT"):
         """Export scheme to JSON"""
         if not self.theme:
             raise ValueError("Generate scheme first!")
         colors = self._extract_colors()
-
-        # if output_path doesn't exist, make automatically
-        if output_path is None:
-            # make new folder output local if doesn't exist
-            output_dir = Path("output")
-            output_dir.mkdir(exist_ok=True)
-            # get wallpaper file name 
-            wallpaper_name = Path(self.wallpaper_path).stem
-            # make new name file with variant
-            output_path = output_dir / f"{wallpaper_name}_{variant}_scheme.json"
-
+        
+        # Save to ~/.config/m3-colors/output only
+        config_dir = Path.home() / ".config" / "m3-colors" / "output"
+        config_dir.mkdir(parents=True, exist_ok=True)
+        wallpaper_name = Path(self.wallpaper_path).stem
+        config_path = config_dir / f"{wallpaper_name}_{variant}_scheme.json"
+        
         output = {
             "wallpaper": self.wallpaper_path,
             "mode": self.mode,
@@ -366,25 +362,12 @@ class M3WAL:
             ),
             "colors": colors,
         }
-
-        # Save to output_path that has been made
-        with open(output_path, "w") as f:
-            json.dump(output, f, indent=2)
-
-        # also save to ~/.config/m3-colors/output
-        config_dir = Path.home() / ".config" / "m3-colors" / "output"
-        config_dir.mkdir(parents=True, exist_ok=True)
-
-        wallpaper_name = Path(self.wallpaper_path).stem
-        config_path = config_dir / f"{wallpaper_name}_{variant}_scheme.json"
-
+        
         with open(config_path, "w") as f:
             json.dump(output, f, indent=2)
-
-        print(f"Exported to: {output_path}")
-        print(f"Also saved to: {config_path}")
-
-        return str(output_path)
+        
+        print(f"Exported to: {config_path}")
+        return str(config_path)
 
     def set_wallpaper(self):
         """Set wallpaper using feh"""
@@ -393,7 +376,7 @@ class M3WAL:
         wallpaper = Path(self.wallpaper_path).expanduser()
         if wallpaper.exists():
             subprocess.run(["feh", "--bg-fill", str(wallpaper)])
-            print(f"  ✓ Set wallpaper with feh")
+            print(f"Set wallpaper with feh")
 
     def apply_template(self, template_path, output_path):
         """Apply colors to template file"""
@@ -578,18 +561,17 @@ def main():
 
     print(f"\nGenerating {mode} scheme with {variant} variant...")
     colors = m3wal.generate_scheme(mode, variant)
-    print(f"  Generated {len(colors)} colors")
+    print(f"Generated {len(colors)} colors")
 
     # Export to JSON
     output = m3wal.export_json(variant=variant)
-    print(f"\nExported to: {output}")
 
     # Apply to all templates
     cache_dir = Path(m3wal.config.get('Paths', 'cache_dir', fallback='~/.cache/m3-colors')).expanduser()
     generated_files = m3wal.apply_all_templates(output_dir=cache_dir)
 
     if generated_files:
-        print(f"\n✨ Generated {len(generated_files)} config files")
+        print(f"\nGenerated {len(generated_files)} config files")
 
     # Deploy configs
     print("\nDeploying configs...")
