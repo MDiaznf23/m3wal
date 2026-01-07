@@ -1,6 +1,3 @@
-cd ~/m3wal
-cat > MANIFEST.in << 'EOF'
 include README.md
 include LICENSE
 recursive-include m3wal/templates *.template
-EOF

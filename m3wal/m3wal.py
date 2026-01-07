@@ -319,6 +319,41 @@ class M3WAL:
             else:
                 print(f"{item['source']} not found")
 
+    def reload_gtk_theme(self):
+        """Reload GTK theme using xsettingsd"""
+        import subprocess
+        import shutil
+        from pathlib import Path
+        
+        # Method 1: Gunakan gsettings (untuk apps yang support)
+        theme_name = "FlatColor"
+        try:
+            # Toggle theme untuk trigger reload
+            subprocess.run(["gsettings", "set", "org.gnome.desktop.interface", "gtk-theme", "Adwaita"], 
+                        stderr=subprocess.DEVNULL)
+            subprocess.run(["gsettings", "set", "org.gnome.desktop.interface", "gtk-theme", theme_name],
+                        stderr=subprocess.DEVNULL)
+            print("Reloaded theme via gsettings")
+        except:
+            pass
+        
+        # Method 2: Restart xsettingsd (untuk apps yang pakai xsettingsd)
+        if shutil.which("xsettingsd"):
+            try:
+                # Kill xsettingsd lama
+                subprocess.run(["pkill", "-x", "xsettingsd"], stderr=subprocess.DEVNULL)
+                # Tunggu sebentar
+                import time
+                time.sleep(0.2)
+                # Start xsettingsd baru TANPA timeout, biarkan running
+                xsettingsd_config = str(Path.home() / ".config" / "xsettingsd" / "xsettingsd.conf")
+                subprocess.Popen(["xsettingsd", "-c", xsettingsd_config],
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL)
+                print("Reloaded theme via xsettingsd")
+            except Exception as e:
+                print(f"Failed to reload xsettingsd: {e}")
+
     def run_post_script(self, script_path=None):
         """Run post-generation script"""
         import subprocess
@@ -576,6 +611,9 @@ def main():
     # Deploy configs
     print("\nDeploying configs...")
     m3wal.deploy_configs()
+
+    print("\nReloading GTK theme...")
+    m3wal.reload_gtk_theme()
 
     # Apply Xresources
     if m3wal.config.getboolean('Features', 'apply_xresources', fallback=True):
