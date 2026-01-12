@@ -22,7 +22,7 @@ Generate beautiful Material 3 color schemes from your wallpapers and apply them 
 
 ## Installation
 
-### From PyPI (Coming Soon)
+### From PyPI 
 
 ```bash
 pip install m3wal
