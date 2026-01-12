@@ -18,7 +18,7 @@ color13:{{term13}}
 color14:{{term14}}
 color15:{{term15}}
 text_color:{{m3onSurface}}
-selected_bg_color:{{m3surfaceContainerLowest}}
+selected_bg_color:{{m3inversePrimary}}
 selected_fg_color:{{m3onSurface}}
 tooltip_bg_color:{{m3surfaceContainerHighest}}
 tooltip_fg_color:{{m3onSurface}}

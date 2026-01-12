@@ -17,13 +17,13 @@
 @define-color color15 {{term15}};
 
 /* M3 Semantic Colors */
-@define-color selected_bg_color {{m3surfaceContainerLowest}};
+@define-color selected_bg_color {{m3inversePrimary}};
 @define-color selected_fg_color {{m3onSurface}};
 @define-color bg_color {{m3surface}};
-@define-color base_color {{m3surfaceContainer}};
+@define-color base_color {{m3surface}};
 @define-color fg_color {{m3onSurface}};
 @define-color text_color {{m3onSurface}};
-@define-color tooltip_bg_color {{m3surfaceContainerHighest}};
+@define-color tooltip_bg_color {{m3surfaceContainer}};
 @define-color tooltip_fg_color {{m3onSurface}};
 
 /* colormap actually used by the theme, to be overridden in other css files */

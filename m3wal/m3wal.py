@@ -5,6 +5,8 @@ Version: Official Library (material-color-utilities)
 Install: pip install material-color-utilities Pillow
 """
 
+import os 
+import subprocess
 import json
 import sys
 from pathlib import Path
@@ -12,8 +14,7 @@ from pathlib import Path
 from material_color_utilities import Variant, hex_from_argb, theme_from_image
 from PIL import Image
 
-
-class M3WAL:
+class M3Color:
     def __init__(self, wallpaper_path, config=None):
         self.wallpaper_path = wallpaper_path
         self.theme = None
@@ -33,6 +34,7 @@ class M3WAL:
             'mode': 'auto',
             'variant': 'CONTENT',
             'brightness_threshold': '128',
+            'operation_mode': 'full',  
             'templates_dir': 'templates',
             'cache_dir': '~/.cache/m3-colors',
             'config_dir': '~/.config/m3-colors',
@@ -48,12 +50,20 @@ class M3WAL:
         
         if config_file.exists():
             config.read(config_file)
+            if not config.has_option('General', 'operation_mode'):
+                if not config.has_section('General'):
+                    config.add_section('General')
+                config.set('General', 'operation_mode', defaults['operation_mode'])
+                # Save updated config
+                with open(config_file, 'w') as f:
+                    config.write(f)
         else:
             # make default config
             config['General'] = {
                 'mode': defaults['mode'],
                 'variant': defaults['variant'],
-                'brightness_threshold': defaults['brightness_threshold']
+                'brightness_threshold': defaults['brightness_threshold'],
+                'operation_mode': defaults['operation_mode']  # TAMBAHAN
             }
             config['Paths'] = {
                 'templates_dir': defaults['templates_dir'],
@@ -193,186 +203,95 @@ class M3WAL:
         # Generate terminal colors
         terminal_colors = self._generate_terminal_colors(scheme)
 
-        return {**m3_colors, **terminal_colors}
+        all_colors = {**m3_colors, **terminal_colors}
+       
+        for key in list(all_colors.keys()):
+            value = all_colors[key]
+            if isinstance(value, int):
+                all_colors[key] = hex_from_argb(value)
+
+         # Add RGB format for KDE
+        for key, value in list(all_colors.items()):
+            if not key.endswith('_rgb'):
+                rgb = self._argb_to_rgb(value)
+                all_colors[f"{key}_rgb"] = f"{rgb[0]},{rgb[1]},{rgb[2]}"
+
+        return all_colors                  
 
     def _generate_terminal_colors(self, scheme):
-        """Generate 16 terminal colors from M3 palette"""
-        return {
-            # Normal colors
-            "term0": scheme.surface_dim,  # Black
-            "term1": scheme.error,  # Red
-            "term2": scheme.tertiary,  # Green
-            "term3": scheme.primary_fixed_dim,  # Yellow
-            "term4": scheme.primary,  # Blue
-            "term5": scheme.secondary,  # Magenta
-            "term6": scheme.tertiary_container,  # Cyan
-            "term7": scheme.on_surface,  # White
-            # Bright colors
-            "term8": scheme.surface_container_high,  # Bright Black
-            "term9": scheme.error_container,  # Bright Red
-            "term10": scheme.tertiary_fixed,  # Bright Green
-            "term11": scheme.primary_fixed,  # Bright Yellow
-            "term12": scheme.primary_container,  # Bright Blue
-            "term13": scheme.secondary_container,  # Bright Magenta
-            "term14": scheme.tertiary_fixed_dim,  # Bright Cyan
-            "term15": scheme.surface_bright,  # Bright White
-        }
+        """Generate 16 terminal colors from M3 palette with better contrast"""
+        
+        if self.mode == "dark":
+            # Dark mode: tetap gunakan mapping lama
+            return {
+                "term0": scheme.surface_dim,
+                "term1": scheme.on_error,
+                "term2": scheme.outline_variant,
+                "term3": scheme.on_primary_fixed_variant,
+                "term4": scheme.on_primary,
+                "term5": scheme.surface_container_highest,
+                "term6": scheme.primary_container,
+                "term7": scheme.inverse_primary,
+                "term8": scheme.inverse_surface,
+                "term9": scheme.error,
+                "term10": scheme.tertiary_fixed,
+                "term11": scheme.primary_fixed,
+                "term12": scheme.primary,
+                "term13": scheme.tertiary,
+                "term14": scheme.tertiary_fixed_dim,
+                "term15": scheme.on_surface,
+            }
+        else:
+            # Light mode: gunakan warna yang lebih kontras
+            return {
+                "term0": scheme.surface_container_highest,  
+                "term1": scheme.error,                       
+                "term2": scheme.on_tertiary_fixed_variant,                
+                "term3": scheme.on_secondary_fixed_variant,          
+                "term4": scheme.primary,                  
+                "term5": scheme.secondary,                
+                "term6": scheme.outline,    
+                "term7": scheme.on_surface_variant,       
+                "term8": scheme.tertiary,          
+                "term9": scheme.on_error_container,       
+                "term10": scheme.tertiary_fixed_dim,      
+                "term11": scheme.on_primary_fixed_variant,
+                "term12": scheme.on_primary_container,    
+                "term13": scheme.on_secondary_container,     
+                "term14": scheme.primary_fixed_dim,                                                  
+                "term15": scheme.surface_dim,                
+            }
 
-    def apply_all_templates(self, templates_dir=None, output_dir=None):
-        """Apply colors to all templates in templates directory"""
+    def _argb_to_rgb(self, argb_color):
+        """Convert ARGB integer to RGB tuple"""
+        if isinstance(argb_color, int):
+            hex_color = hex_from_argb(argb_color)
+        else:
+            hex_color = argb_color
+        
+        color_clean = hex_color.replace('#', '')
+        return tuple(int(color_clean[j:j+2], 16) for j in (0, 2, 4))
+
+    def preview_colors(self):
+        """Print color preview"""
         if not self.theme:
             raise ValueError("Generate scheme first!")
 
-        if output_dir is None:
-            output_dir = Path.home() / ".cache" / "m3-colors"
+        colors = self._extract_colors()
 
-        # Use package templates if not specified
-        if templates_dir is None:
-            try:
-                import pkg_resources
-                templates_dir = pkg_resources.resource_filename('m3wal', 'templates')
-            except:
-                # Fallback to config dir
-                templates_dir = Path.home() / ".config" / "m3-colors" / "templates"
-        
-        templates_path = Path(templates_dir)
-        output_path = Path(output_dir)
-        output_path.mkdir(parents=True, exist_ok=True)
+        print(f"\nColor Preview ({self.mode} mode):")
+        print(
+            f"Source: {hex_from_argb(self.source_color) if isinstance(self.source_color, int) else self.source_color}"
+        )
+        print(f"\nPrimary: {colors['m3primary']}")
+        print(f"Secondary: {colors['m3secondary']}")
+        print(f"Tertiary: {colors['m3tertiary']}")
+        print(f"Surface: {colors['m3surface']}")
+        print(f"Error: {colors['m3error']}")
 
-        # Cari semua file .template
-        template_files = list(templates_path.glob("*.template"))
-
-        if not template_files:
-            print(f"No template files found in {templates_dir}/")
-            return []
-
-        generated_files = []
-
-        print(f"\nApplying colors to templates...")
-        for template_file in template_files:
-            # Hilangkan ekstensi .template untuk nama output
-            output_filename = template_file.stem
-            output_file = output_path / output_filename
-
-            try:
-                self.apply_template(template_file, output_file)
-                generated_files.append(str(output_file))
-                print(f"✓ {template_file.name} → {output_file}")
-            except Exception as e:
-                print(f"✗ {template_file.name}: {e}")
-
-        return generated_files
-
-    def create_wallpaper_symlink(self):
-        """Create symlink to current wallpaper in ~/.config/m3-colors"""
-        config_dir = Path.home() / ".config" / "m3-colors"
-        config_dir.mkdir(parents=True, exist_ok=True)
-    
-        symlink_path = config_dir / "current_wallpaper"
-        wallpaper_path = Path(self.wallpaper_path).resolve()
-    
-        # Delete old symlink if exist
-        if symlink_path.exists() or symlink_path.is_symlink():
-            symlink_path.unlink()
-    
-        # Make new symlink 
-        symlink_path.symlink_to(wallpaper_path)
-        print(f"Created symlink → {symlink_path}")
-
-    def load_deploy_config(self):
-        """Load deployment mappings from config"""
-        config_file = Path.home() / ".config" / "m3-colors" / "deploy.json"
-        
-        default_config = {
-            "deployments": [
-                {"source": "colors-nvim.lua", "destination": "~/.config/nvim/lua/themes/material3.lua"},
-                {"source": "gtkrc", "destination": "~/.local/share/themes/FlatColor/gtk-2.0/gtkrc"},
-                {"source": "gtk.css", "destination": "~/.local/share/themes/FlatColor/gtk-3.0/gtk.css"},
-                {"source": "gtk.3.20", "destination": "~/.local/share/themes/FlatColor/gtk-3.20/gtk.css"}
-            ]
-        }
-        
-        if config_file.exists():
-            with open(config_file, 'r') as f:
-                return json.load(f)
-        else:
-            config_file.parent.mkdir(parents=True, exist_ok=True)
-            with open(config_file, 'w') as f:
-                json.dump(default_config, f, indent=2)
-            return default_config
-
-    def deploy_configs(self):
-        """Deploy configs based on deploy.json"""
-        import shutil
-        
-        cache_dir = Path.home() / ".cache" / "m3-colors"
-        config = self.load_deploy_config()
-        
-        for item in config.get("deployments", []):
-            src = cache_dir / item["source"]
-            dest = Path(item["destination"]).expanduser()
-            
-            if src.exists():
-                dest.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(src, dest)
-                print(f"{item['source']} → {dest}")
-            else:
-                print(f"{item['source']} not found")
-
-    def reload_gtk_theme(self):
-        """Reload GTK theme using xsettingsd"""
-        import subprocess
-        import shutil
-        from pathlib import Path
-        
-        # Method 1: Gunakan gsettings (untuk apps yang support)
-        theme_name = "FlatColor"
-        try:
-            # Toggle theme untuk trigger reload
-            subprocess.run(["gsettings", "set", "org.gnome.desktop.interface", "gtk-theme", "Adwaita"], 
-                        stderr=subprocess.DEVNULL)
-            subprocess.run(["gsettings", "set", "org.gnome.desktop.interface", "gtk-theme", theme_name],
-                        stderr=subprocess.DEVNULL)
-            print("Reloaded theme via gsettings")
-        except:
-            pass
-        
-        # Method 2: Restart xsettingsd (untuk apps yang pakai xsettingsd)
-        if shutil.which("xsettingsd"):
-            try:
-                # Kill xsettingsd lama
-                subprocess.run(["pkill", "-x", "xsettingsd"], stderr=subprocess.DEVNULL)
-                # Tunggu sebentar
-                import time
-                time.sleep(0.2)
-                # Start xsettingsd baru TANPA timeout, biarkan running
-                xsettingsd_config = str(Path.home() / ".config" / "xsettingsd" / "xsettingsd.conf")
-                subprocess.Popen(["xsettingsd", "-c", xsettingsd_config],
-                            stdout=subprocess.DEVNULL,
-                            stderr=subprocess.DEVNULL)
-                print("Reloaded theme via xsettingsd")
-            except Exception as e:
-                print(f"Failed to reload xsettingsd: {e}")
-
-    def run_post_script(self, script_path=None):
-        """Run post-generation script"""
-        import subprocess
-
-        if script_path is None:
-            script_path = Path.home() / ".config" / "m3-colors" / "m3wal-post.sh"
-        
-        script = Path(script_path).expanduser()
-        if script.exists():
-            subprocess.run(["bash", str(script)])
-            print(f"Executed {script.name}")    
-
-    def apply_xresources(self):
-        import subprocess
-
-        xresources = Path.home() / ".cache" / "m3-colors" / "colors.Xresources"
-        if xresources.exists():
-            subprocess.run(["xrdb", "-merge", str(xresources)])
-            print(f"Applied Xresources")
+        print(f"\nTerminal Colors:")
+        for i in range(16):
+            print(f"term{i}: {colors[f'term{i}']}")
 
     def export_json(self, output_path=None, variant="CONTENT"):
         """Export scheme to JSON"""
@@ -404,42 +323,99 @@ class M3WAL:
         print(f"Exported to: {config_path}")
         return str(config_path)
 
-    def set_wallpaper(self):
-        """Set wallpaper using feh"""
-        import subprocess
-
-        wallpaper = Path(self.wallpaper_path).expanduser()
-        if wallpaper.exists():
-            subprocess.run(["feh", "--bg-fill", str(wallpaper)])
-            print(f"Set wallpaper with feh")
-
-    def apply_template(self, template_path, output_path):
-        """Apply colors to template file"""
+    def export_css(self, output_path=None, variant="CONTENT"):
+        """Export scheme to CSS variables"""
         if not self.theme:
             raise ValueError("Generate scheme first!")
-
         colors = self._extract_colors()
+        
+        # Save to ~/.config/m3-colors/output
+        config_dir = Path.home() / ".config" / "m3-colors" / "output"
+        config_dir.mkdir(parents=True, exist_ok=True)
+        wallpaper_name = Path(self.wallpaper_path).stem
+        
+        if output_path is None:
+            output_path = config_dir / f"{wallpaper_name}_{variant}_scheme.css"
+        
+        # Generate CSS content
+        css_content = f"""/* Material 3 Color Scheme - {variant} */
+    /* Generated from: {wallpaper_name} */
+    /* Mode: {self.mode} */
 
-        # Add metadata to dictionary colors
-        colors["wallpaper_path"] = self.wallpaper_path
-        colors["mode"] = self.mode
-        colors["source_color"] = (
-            hex_from_argb(self.source_color)
-            if isinstance(self.source_color, int)
-            else self.source_color
-        )
-
-        with open(template_path, "r") as f:
-            template = f.read()
-
-        # Replace {{m3primary}}, {{term0}}, {{wallpaper_path}}, etc.
-        for key, value in colors.items():
-            template = template.replace(f"{{{{{key}}}}}", str(value))
-
+    :root {{
+    /* Source Color */
+    --source-color: {hex_from_argb(self.source_color) if isinstance(self.source_color, int) else self.source_color};
+    
+    /* Primary Colors */
+    --primary: {colors['m3primary']};
+    --on-primary: {colors['m3onPrimary']};
+    --primary-container: {colors['m3primaryContainer']};
+    --on-primary-container: {colors['m3onPrimaryContainer']};
+    --primary-fixed: {colors['m3primaryFixed']};
+    --primary-fixed-dim: {colors['m3primaryFixedDim']};
+    --on-primary-fixed: {colors['m3onPrimaryFixed']};
+    --on-primary-fixed-variant: {colors['m3onPrimaryFixedVariant']};
+    
+    /* Secondary Colors */
+    --secondary: {colors['m3secondary']};
+    --on-secondary: {colors['m3onSecondary']};
+    --secondary-container: {colors['m3secondaryContainer']};
+    --on-secondary-container: {colors['m3onSecondaryContainer']};
+    --secondary-fixed: {colors['m3secondaryFixed']};
+    --secondary-fixed-dim: {colors['m3secondaryFixedDim']};
+    --on-secondary-fixed: {colors['m3onSecondaryFixed']};
+    --on-secondary-fixed-variant: {colors['m3onSecondaryFixedVariant']};
+    
+    /* Tertiary Colors */
+    --tertiary: {colors['m3tertiary']};
+    --on-tertiary: {colors['m3onTertiary']};
+    --tertiary-container: {colors['m3tertiaryContainer']};
+    --on-tertiary-container: {colors['m3onTertiaryContainer']};
+    --tertiary-fixed: {colors['m3tertiaryFixed']};
+    --tertiary-fixed-dim: {colors['m3tertiaryFixedDim']};
+    --on-tertiary-fixed: {colors['m3onTertiaryFixed']};
+    --on-tertiary-fixed-variant: {colors['m3onTertiaryFixedVariant']};
+    
+    /* Error Colors */
+    --error: {colors['m3error']};
+    --on-error: {colors['m3onError']};
+    --error-container: {colors['m3errorContainer']};
+    --on-error-container: {colors['m3onErrorContainer']};
+    
+    /* Surface Colors */
+    --surface: {colors['m3surface']};
+    --on-surface: {colors['m3onSurface']};
+    --surface-variant: {colors['m3surfaceVariant']};
+    --on-surface-variant: {colors['m3onSurfaceVariant']};
+    --surface-dim: {colors['m3surfaceDim']};
+    --surface-bright: {colors['m3surfaceBright']};
+    --surface-container-lowest: {colors['m3surfaceContainerLowest']};
+    --surface-container-low: {colors['m3surfaceContainerLow']};
+    --surface-container: {colors['m3surfaceContainer']};
+    --surface-container-high: {colors['m3surfaceContainerHigh']};
+    --surface-container-highest: {colors['m3surfaceContainerHighest']};
+    
+    /* Outline Colors */
+    --outline: {colors['m3outline']};
+    --outline-variant: {colors['m3outlineVariant']};
+    
+    /* Inverse Colors */
+    --inverse-surface: {colors['m3inverseSurface']};
+    --inverse-on-surface: {colors['m3inverseOnSurface']};
+    --inverse-primary: {colors['m3inversePrimary']};
+    
+    /* Shadow & Scrim */
+    --shadow: {colors['m3shadow']};
+    --scrim: {colors['m3scrim']};
+    }}
+    """
+        
+        # Write to file
         with open(output_path, "w") as f:
-            f.write(template)
-
-        return output_path
+            f.write(css_content)
+        
+        print(f"Exported CSS to: {output_path}")
+        return str(output_path)
 
     def generate_palette_preview(self, output_path=None):
         """Generate color palette preview image"""
@@ -547,107 +523,447 @@ class M3WAL:
         
         return str(output_path)
 
-    def preview_colors(self):
-        """Print color preview"""
+class M3WAL(M3Color):
+    def __init__(self, wallpaper_path, config=None):
+        super().__init__(wallpaper_path, config)
+
+    def apply_all_templates(self, templates_dir=None, output_dir=None):
+        """Apply colors to all templates - OPTIMIZED VERSION"""
         if not self.theme:
             raise ValueError("Generate scheme first!")
 
+        if output_dir is None:
+            output_dir = Path.home() / ".cache" / "m3-colors"
+
+        if templates_dir is None:
+            try:
+                import pkg_resources
+                templates_dir = pkg_resources.resource_filename('m3wal', 'templates')
+            except:
+                templates_dir = Path.home() / ".config" / "m3-colors" / "templates"
+        
+        templates_path = Path(templates_dir)
+        output_path = Path(output_dir)
+        output_path.mkdir(parents=True, exist_ok=True)
+
+        # Find all template files
+        template_files = list(templates_path.glob("*.template"))
+
+        if not template_files:
+            print(f"No template files found in {templates_dir}/")
+            return []
+
+        # ===== OPTIMIZATION: Extract colors ONCE =====
         colors = self._extract_colors()
-
-        print(f"\nColor Preview ({self.mode} mode):")
-        print(
-            f"  Source: {hex_from_argb(self.source_color) if isinstance(self.source_color, int) else self.source_color}"
+        
+        # Add metadata
+        colors["wallpaper_path"] = self.wallpaper_path
+        colors["mode"] = self.mode
+        colors["source_color"] = (
+            hex_from_argb(self.source_color)
+            if isinstance(self.source_color, int)
+            else self.source_color
         )
-        print(f"\n  Primary: {colors['m3primary']}")
-        print(f"  Secondary: {colors['m3secondary']}")
-        print(f"  Tertiary: {colors['m3tertiary']}")
-        print(f"  Surface: {colors['m3surface']}")
-        print(f"  Error: {colors['m3error']}")
 
-        print(f"\n  Terminal Colors:")
-        for i in range(16):
-            print(f"    term{i}: {colors[f'term{i}']}")
+        # ===== OPTIMIZATION: Process templates in parallel =====
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        
+        def process_template(template_file):
+            """Process single template file"""
+            try:
+                # Read template
+                with open(template_file, 'r') as f:
+                    content = f.read()
+                
+                # Replace all placeholders
+                for key, value in colors.items():
+                    content = content.replace(f'{{{{{key}}}}}', str(value))
+                
+                # Write output
+                output_filename = template_file.stem
+                output_file = output_path / output_filename
+                
+                with open(output_file, 'w') as f:
+                    f.write(content)
+                
+                return (True, template_file.name, str(output_file))
+                
+            except Exception as e:
+                return (False, template_file.name, str(e))
+
+        generated_files = []
+        
+        print(f"\nApplying colors to {len(template_files)} templates...")
+        
+        # Process with ThreadPoolExecutor (max 4 workers untuk I/O bound tasks)
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            # Submit all tasks
+            future_to_template = {
+                executor.submit(process_template, tf): tf 
+                for tf in template_files
+            }
+            
+            # Collect results as they complete
+            for future in as_completed(future_to_template):
+                success, name, result = future.result()
+                
+                if success:
+                    generated_files.append(result)
+                    print(f"✓ {name} → {result}")
+                else:
+                    print(f"✗ {name}: {result}")
+
+        return generated_files
+
+    def create_wallpaper_symlink(self):
+        """Create symlink to current wallpaper in ~/.config/m3-colors"""
+        config_dir = Path.home() / ".config" / "m3-colors"
+        config_dir.mkdir(parents=True, exist_ok=True)
+    
+        symlink_path = config_dir / "current_wallpaper"
+        wallpaper_path = Path(self.wallpaper_path).resolve()
+    
+        # Delete old symlink if exist
+        if symlink_path.exists() or symlink_path.is_symlink():
+            symlink_path.unlink()
+    
+        # Make new symlink 
+        symlink_path.symlink_to(wallpaper_path)
+        print(f"Created symlink → {symlink_path}")
+
+    def load_deploy_config(self):
+        """Load deployment mappings from config"""
+        config_file = Path.home() / ".config" / "m3-colors" / "deploy.json"
+        
+        default_config = {
+            "deployments": [
+                {"source": "colors-nvim.lua", "destination": "~/.config/nvim/lua/themes/material3.lua"},
+                {"source": "gtkrc", "destination": "~/.local/share/themes/FlatColor/gtk-2.0/gtkrc"},
+                {"source": "gtk.css", "destination": "~/.local/share/themes/FlatColor/gtk-3.0/gtk.css"},
+                {"source": "gtk.3.20", "destination": "~/.local/share/themes/FlatColor/gtk-3.20/gtk.css"}
+            ]
+        }
+        
+        if config_file.exists():
+            with open(config_file, 'r') as f:
+                return json.load(f)
+        else:
+            config_file.parent.mkdir(parents=True, exist_ok=True)
+            with open(config_file, 'w') as f:
+                json.dump(default_config, f, indent=2)
+            return default_config
+
+    def deploy_configs(self):
+        """Deploy configs based on deploy.json"""
+        import shutil
+        
+        cache_dir = Path.home() / ".cache" / "m3-colors"
+        config = self.load_deploy_config()
+        
+        for item in config.get("deployments", []):
+            src = cache_dir / item["source"]
+            dest = Path(item["destination"]).expanduser()
+            
+            if src.exists():
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src, dest)
+                print(f"{item['source']} → {dest}")
+            else:
+                print(f"{item['source']} not found")
+
+    def run_hook_scripts(self):
+        """Run external hook scripts with color env vars"""
+        if not self.config.has_section('Hook.Scripts'):
+            return
+        
+        if not self.config.getboolean('Hook.Scripts', 'enabled', fallback=False):
+            return
+        
+        scripts_dir = Path(self.config.get('Hooks', 'scripts_dir', 
+                        fallback='~/.config/m3-colors/hooks')).expanduser()
+        
+        if not scripts_dir.exists():
+            return
+        
+        scripts = self.config.get('Hook.Scripts', 'scripts', fallback='').split(',')
+        scripts = [s.strip() for s in scripts if s.strip()]
+        
+        # Prepare environment variables
+        colors = self._extract_colors()
+        env = os.environ.copy()
+        env.update({
+            'M3_MODE': self.mode,
+            'M3_WALLPAPER': self.wallpaper_path,
+            **{f'M3_{k.upper()}': str(v) for k, v in colors.items()}
+        })
+        
+        for script_name in scripts:
+            script_path = scripts_dir / script_name
+            if script_path.exists() and script_path.is_file():
+                print(f"\n[HOOK] Running script: {script_name}")
+                try:
+                    subprocess.run(['bash', str(script_path)], env=env, check=True)
+                    print(f"✓ Success")
+                except Exception as e:
+                    print(f"✗ Failed: {e}")
+
+    def reload_gtk_theme(self):
+        """Reload GTK theme using xsettingsd"""
+        import subprocess
+        import shutil
+        from pathlib import Path
+        
+        # Method 1: gsettings 
+        theme_name = "FlatColor"
+        try:
+            # Toggle theme untuk trigger reload
+            subprocess.run(["gsettings", "set", "org.gnome.desktop.interface", "gtk-theme", "Adwaita"], 
+                        stderr=subprocess.DEVNULL)
+            subprocess.run(["gsettings", "set", "org.gnome.desktop.interface", "gtk-theme", theme_name],
+                        stderr=subprocess.DEVNULL)
+            print("Reloaded theme via gsettings")
+        except:
+            pass
+        
+        # Method 2: Restart xsettingsd
+        if shutil.which("xsettingsd"):
+            try:
+                # Kill xsettingsd lama
+                subprocess.run(["pkill", "-x", "xsettingsd"], stderr=subprocess.DEVNULL)
+                # Wait a second
+                import time
+                time.sleep(0.2)
+                # Start xsettingsd baru TANPA timeout, biarkan running
+                xsettingsd_config = str(Path.home() / ".config" / "xsettingsd" / "xsettingsd.conf")
+                subprocess.Popen(["xsettingsd", "-c", xsettingsd_config],
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL)
+                print("Reloaded theme via xsettingsd")
+            except Exception as e:
+                print(f"Failed to reload xsettingsd: {e}")
+
+    def run_post_script(self, script_path=None):
+        """Run post-generation script"""
+        import subprocess
+
+        if script_path is None:
+            script_path = Path.home() / ".config" / "m3-colors" / "m3wal-post.sh"
+        
+        script = Path(script_path).expanduser()
+        if script.exists():
+            subprocess.run(["bash", str(script)])
+            print(f"Executed {script.name}")    
+
+    def apply_xresources(self):
+        import subprocess
+
+        xresources = Path.home() / ".cache" / "m3-colors" / "colors.Xresources"
+        if xresources.exists():
+            subprocess.run(["xrdb", "-merge", str(xresources)])
+            print(f"Applied Xresources")
+
+    def set_wallpaper(self):
+        """Set wallpaper using feh"""
+        import subprocess
+
+        wallpaper = Path(self.wallpaper_path).expanduser()
+        if wallpaper.exists():
+            subprocess.run(["feh", "--bg-fill", str(wallpaper)])
+            print(f"Set wallpaper with feh")
+
+    def apply_template(self, template_path, output_path, colors=None):
+        """Apply colors to single template file
+        
+        Args:
+            template_path: Path to template file
+            output_path: Path to output file
+            colors: Optional pre-extracted colors dict (untuk speed)
+        """
+        if not self.theme:
+            raise ValueError("Generate scheme first!")
+
+        # Use provided colors or extract new
+        if colors is None:
+            colors = self._extract_colors()
+            
+            # Add metadata
+            colors["wallpaper_path"] = self.wallpaper_path
+            colors["mode"] = self.mode
+            colors["source_color"] = (
+                hex_from_argb(self.source_color)
+                if isinstance(self.source_color, int)
+                else self.source_color
+            )
+
+        # Read template
+        with open(template_path, "r") as f:
+            template = f.read()
+
+        # Replace all placeholders {{key}}
+        for key, value in colors.items():
+            template = template.replace(f"{{{{{key}}}}}", str(value))
+
+        # Write output
+        with open(output_path, "w") as f:
+            f.write(template)
+
+        return output_path
 
 def main():
-    if len(sys.argv) < 2:
-        print("Usage: python m3wal.py <wallpaper_path> [light|dark|auto] [variant]")
-        print("\nVariants: TONALSPOT, VIBRANT, EXPRESSIVE, NEUTRAL, FIDELITY, CONTENT, MONOCHROME")
-        print("Default: uses m3-colors.conf settings")
-        sys.exit(1)
-
-    wallpaper = sys.argv[1]
+    import argparse
     
-    # Initialize and load config
-    m3wal = M3WAL(wallpaper)
+    # Setup argument parser
+    parser = argparse.ArgumentParser(
+        description='M3WAL: Material 3 Color Scheme Generator from Wallpaper',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+
+    # Required arguments
+    parser.add_argument('wallpaper', help='Path to wallpaper image')
+
+    # Color configuration
+    color_group = parser.add_argument_group('color configuration')
+    color_group.add_argument('--mode', '-m', choices=['light', 'dark', 'auto'], 
+                            help='Color scheme mode (overrides config)')
+    color_group.add_argument('--variant', '-v',
+                            choices=['TONALSPOT', 'VIBRANT', 'EXPRESSIVE', 'NEUTRAL', 
+                                    'FIDELITY', 'CONTENT', 'MONOCHROME'],
+                            help='Material 3 variant (overrides config)')
+
+    # Execution modes
+    mode_group = parser.add_argument_group('execution modes')
+    mode_group.add_argument('--generator-only', '-g', action='store_true',
+                        help='Only generate colors, skip ricing')
+    mode_group.add_argument('--full', '-f', action='store_true',
+                        help='Apply all configurations')
+    
+    args = parser.parse_args()
+    
+    # Initialize - gunakan class sesuai mode
+    wallpaper = args.wallpaper
+    
+    # Determine operation mode
+    if args.generator_only:
+        operation_mode = 'generator'
+        m3wal = M3Color(wallpaper)
+        print("[INFO] Using --generator-only flag")
+    elif args.full:
+        operation_mode = 'full'
+        m3wal = M3WAL(wallpaper)
+        print("[INFO] Using --full flag")
+    else:
+        # Use config default
+        config_file = Path.home() / ".config" / "m3-colors" / "m3-colors.conf"
+        print(f"[INFO] Using default config: {config_file}")
+        
+        temp_config = M3Color(wallpaper).config
+        operation_mode = temp_config.get('General', 'operation_mode', fallback='full')
+        
+        if operation_mode == 'generator':
+            m3wal = M3Color(wallpaper)
+        else:
+            m3wal = M3WAL(wallpaper)
+        
+        print(f"[INFO] Config operation_mode: {operation_mode}")
     
     # Override config with CLI args if provided
-    mode = sys.argv[2] if len(sys.argv) > 2 else m3wal.config.get('General', 'mode', fallback='auto')
-    variant = sys.argv[3] if len(sys.argv) > 3 else m3wal.config.get('General', 'variant', fallback='CONTENT')
-
-    # Analyze wallpaper
-    print("Analyzing wallpaper...")
+    mode = args.mode if args.mode else m3wal.config.get('General', 'mode', fallback='auto')
+    variant = args.variant if args.variant else m3wal.config.get('General', 'variant', fallback='CONTENT')
+    
+    if args.mode:
+        print(f"[INFO] Mode overridden by CLI: {mode}")
+    if args.variant:
+        print(f"[INFO] Variant overridden by CLI: {variant}")
+    
+    print(f"\nOperation Mode: {operation_mode}")
+    print(f"="*50)
+    
+    # ===== CORE OPERATIONS (Always run) =====
+    print("\n[CORE] Analyzing wallpaper...")
     analysis = m3wal.analyze_wallpaper()
-    print(f"  Brightness: {analysis['brightness']:.1f} (threshold: {m3wal.brightness_threshold})")
-    print(f"  Auto-detected mode: {analysis['mode']}")
-
+    print(f"Brightness: {analysis['brightness']:.1f} (threshold: {m3wal.brightness_threshold})")
+    print(f"Auto-detected mode: {analysis['mode']}")
+    
     # Generate scheme
     if mode == "auto":
         mode = analysis["mode"]
-
-    print(f"\nGenerating {mode} scheme with {variant} variant...")
+    
+    print(f"\n[CORE] Generating {mode} scheme with {variant} variant...")
     colors = m3wal.generate_scheme(mode, variant)
     print(f"Generated {len(colors)} colors")
-
+    
     # Export to JSON
+    print("\n[CORE] Exporting color scheme...")
     output = m3wal.export_json(variant=variant)
-
-    # Apply to all templates
-    cache_dir = Path(m3wal.config.get('Paths', 'cache_dir', fallback='~/.cache/m3-colors')).expanduser()
-    generated_files = m3wal.apply_all_templates(output_dir=cache_dir)
-
-    if generated_files:
-        print(f"\nGenerated {len(generated_files)} config files")
-
-    # Deploy configs
-    print("\nDeploying configs...")
-    m3wal.deploy_configs()
-
-    print("\nReloading GTK theme...")
-    m3wal.reload_gtk_theme()
-
-    # Apply Xresources
-    if m3wal.config.getboolean('Features', 'apply_xresources', fallback=True):
-        print("\nApplying Xresources...")
-        m3wal.apply_xresources()
-
-    # Set wallpaper
-    if m3wal.config.getboolean('Features', 'set_wallpaper', fallback=True):
-        print("\nSetting wallpaper...")
-        m3wal.set_wallpaper()
-
-    # Create wallpaper symlink
-    if m3wal.config.getboolean('Features', 'create_symlink', fallback=True):
-        print("\nCreating wallpaper symlink...")
-        m3wal.create_wallpaper_symlink()
-
-    # Run post script
-    if m3wal.config.getboolean('Features', 'run_post_script', fallback=True):
-        script_path = m3wal.config.get('PostScript', 'script_path', fallback='m3wal-post.sh')
-        # if relative path, merge with config_dir
-        if not Path(script_path).is_absolute():
-            config_dir = Path(m3wal.config.get('Paths', 'config_dir', fallback='~/.config/m3-colors')).expanduser()
-            script_path = config_dir / script_path
-        
-        print("\nRunning post script...")
-        m3wal.run_post_script(script_path)
+    output_css = m3wal.export_css(variant=variant)
 
     # Show preview
+    print("\n[CORE] Color Preview:")
     m3wal.preview_colors()
-
-    # Generate palette preview
+    
+    # Generate palette preview (if enabled)
     if m3wal.config.getboolean('Features', 'generate_palette_preview', fallback=True):
-        print("\nGenerating palette preview...")
+        print("\n[CORE] Generating palette preview...")
         m3wal.generate_palette_preview()
+    
+    # ===== RICING OPERATIONS (Only if full mode) =====
+    if operation_mode == 'full':
+        print(f"\n{'='*50}")
+        print("[RICING] Applying configurations...")
+        print(f"{'='*50}")
+        
+        # Apply to all templates
+        cache_dir = Path(m3wal.config.get('Paths', 'cache_dir', fallback='~/.cache/m3-colors')).expanduser()
+        generated_files = m3wal.apply_all_templates(output_dir=cache_dir)
+        
+        if generated_files:
+            print(f"\nGenerated {len(generated_files)} config files")
+        
+        # Deploy configs
+        print("\n[RICING] Deploying configs...")
+        m3wal.deploy_configs()
+        
+        print("\n[RICING] Reloading GTK theme...")
+        m3wal.reload_gtk_theme()
+        
+        # Run hook script
+        print("\n[RICING] Run Hook Scripts...")
+        m3wal.run_hook_scripts()
+        
+        # Apply Xresources
+        if m3wal.config.getboolean('Features', 'apply_xresources', fallback=True):
+            print("\n[RICING] Applying Xresources...")
+            m3wal.apply_xresources()
+        
+        # Set wallpaper
+        if m3wal.config.getboolean('Features', 'set_wallpaper', fallback=True):
+            print("\n[RICING] Setting wallpaper...")
+            m3wal.set_wallpaper()
+        
+        # Create wallpaper symlink
+        if m3wal.config.getboolean('Features', 'create_symlink', fallback=True):
+            print("\n[RICING] Creating wallpaper symlink...")
+            m3wal.create_wallpaper_symlink()
+        
+        # Run post script
+        if m3wal.config.getboolean('Features', 'run_post_script', fallback=True):
+            script_path = m3wal.config.get('PostScript', 'script_path', fallback='m3wal-post.sh')
+            # if relative path, merge with config_dir
+            if not Path(script_path).is_absolute():
+                config_dir = Path(m3wal.config.get('Paths', 'config_dir', fallback='~/.config/m3-colors')).expanduser()
+                script_path = config_dir / script_path
+            
+            print("\n[RICING] Running post script...")
+            m3wal.run_post_script(script_path)
+    
+    else:
+        print(f"\n{'='*50}")
+        print("[INFO] Generator-only mode: Ricing operations skipped")
+        print(f"Use --full flag or set operation_mode='full' in config")
+        print(f"to apply configurations to your system")
+        print(f"{'='*50}")
+    
+    print(f"\nDone!")
 
 if __name__ == "__main__":
     main()
