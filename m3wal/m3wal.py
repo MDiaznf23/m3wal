@@ -681,8 +681,8 @@ class M3WAL(M3Color):
 
         if templates_dir is None:
             try:
-                import pkg_resources
-                templates_dir = pkg_resources.resource_filename('m3wal', 'templates')
+                from importlib.resources import files
+                templates_dir = files('m3wal').joinpath('templates')
             except:
                 templates_dir = Path.home() / ".config" / "m3-colors" / "templates"
         
