@@ -2,6 +2,19 @@
 
 > Material 3 Wallpaper-based Color Scheme Generator
 
+<p align="center">
+  <img src="screenshots/demo-1.png" alt="M3WAL Palette 1" width="800">
+</p>
+
+<p align="center">
+  <img src="screenshots/demo-2.png" alt="M3WAL Palette 1" width="800">
+</p>
+
+<p align="center">
+  <img src="screenshots/demo-3.png" alt="M3WAL Palette 1" width="800">
+</p>
+
+
 Generate beautiful Material 3 color schemes from your wallpapers and apply them system-wide to your Linux desktop.
 
 ## Features
@@ -442,7 +455,7 @@ Contributions welcome! Please feel free to submit a Pull Request.
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) file for details.
+MIT License - see [LICENSE](LICENSE.txt) file for details.
 
 ## Credits
 
