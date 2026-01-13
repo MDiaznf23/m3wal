@@ -43,27 +43,44 @@ class M3Color:
             'generate_palette_preview': 'true',
             'run_post_script': 'true',
             'create_symlink': 'true',
-            'script_path': 'm3wal-post.sh'
+            'script_path': 'm3wal-post.sh',
+            'scripts_dir': '~/.config/m3-colors/hooks',
+            'hook_scripts_enabled': 'false',
+            'hook_scripts': 'eww.sh'
         }
         
         config = configparser.ConfigParser()
         
         if config_file.exists():
             config.read(config_file)
+            
+            # Update missing options
             if not config.has_option('General', 'operation_mode'):
                 if not config.has_section('General'):
                     config.add_section('General')
                 config.set('General', 'operation_mode', defaults['operation_mode'])
-                # Save updated config
-                with open(config_file, 'w') as f:
-                    config.write(f)
+            
+            # Add Hooks section if missing
+            if not config.has_section('Hooks'):
+                config.add_section('Hooks')
+                config.set('Hooks', 'scripts_dir', defaults['scripts_dir'])
+            
+            # Add Hook.Scripts section if missing
+            if not config.has_section('Hook.Scripts'):
+                config.add_section('Hook.Scripts')
+                config.set('Hook.Scripts', 'enabled', defaults['hook_scripts_enabled'])
+                config.set('Hook.Scripts', 'scripts', defaults['hook_scripts'])
+            
+            # Save updated config
+            with open(config_file, 'w') as f:
+                config.write(f)
         else:
             # make default config
             config['General'] = {
                 'mode': defaults['mode'],
                 'variant': defaults['variant'],
                 'brightness_threshold': defaults['brightness_threshold'],
-                'operation_mode': defaults['operation_mode']  # TAMBAHAN
+                'operation_mode': defaults['operation_mode']
             }
             config['Paths'] = {
                 'templates_dir': defaults['templates_dir'],
@@ -76,6 +93,13 @@ class M3Color:
                 'generate_palette_preview': defaults['generate_palette_preview'],
                 'run_post_script': defaults['run_post_script'],
                 'create_symlink': defaults['create_symlink']
+            }
+            config['Hooks'] = {
+                'scripts_dir': defaults['scripts_dir']
+            }
+            config['Hook.Scripts'] = {
+                'enabled': defaults['hook_scripts_enabled'],
+                'scripts': defaults['hook_scripts']
             }
             config['PostScript'] = {
                 'script_path': defaults['script_path']
@@ -520,6 +544,126 @@ class M3Color:
         
         img.save(output_path)
         print(f"Palette preview saved: {output_path}")
+        
+        return str(output_path)
+
+    def generate_all_variants_preview(self, output_path=None):
+        """Generate preview semua variant dalam satu gambar"""
+        if not self.theme:
+            raise ValueError("Generate scheme first!")
+        
+        try:
+            from PIL import Image, ImageDraw, ImageFont
+        except ImportError:
+            print("PIL/Pillow not installed. Install: pip install Pillow")
+            return None
+        
+        # Semua variant yang akan di-generate
+        variants = ['TONALSPOT', 'VIBRANT', 'EXPRESSIVE', 'NEUTRAL', 
+                    'FIDELITY', 'CONTENT', 'MONOCHROME']
+        
+        # Konfigurasi - lebih rapat
+        cell_width = 45
+        cell_height = 35
+        colors_per_row = 16
+        variant_spacing = 15  # Lebih rapat
+        header_height = 18    # Lebih rapat
+        
+        # SEMUA warna M3
+        color_keys = [
+            # Primary
+            'm3primary', 'm3onPrimary', 'm3primaryContainer', 'm3onPrimaryContainer',
+            'm3primaryFixed', 'm3primaryFixedDim', 'm3onPrimaryFixed', 'm3onPrimaryFixedVariant',
+            # Secondary
+            'm3secondary', 'm3onSecondary', 'm3secondaryContainer', 'm3onSecondaryContainer',
+            'm3secondaryFixed', 'm3secondaryFixedDim', 'm3onSecondaryFixed', 'm3onSecondaryFixedVariant',
+            # Tertiary
+            'm3tertiary', 'm3onTertiary', 'm3tertiaryContainer', 'm3onTertiaryContainer',
+            'm3tertiaryFixed', 'm3tertiaryFixedDim', 'm3onTertiaryFixed', 'm3onTertiaryFixedVariant',
+            # Error
+            'm3error', 'm3onError', 'm3errorContainer', 'm3onErrorContainer',
+            # Surface
+            'm3surface', 'm3onSurface', 'm3surfaceVariant', 'm3onSurfaceVariant',
+            'm3surfaceDim', 'm3surfaceBright', 'm3surfaceContainerLowest', 'm3surfaceContainerLow',
+            'm3surfaceContainer', 'm3surfaceContainerHigh', 'm3surfaceContainerHighest',
+            # Outline
+            'm3outline', 'm3outlineVariant',
+            # Inverse
+            'm3inverseSurface', 'm3inverseOnSurface', 'm3inversePrimary',
+            # Shadow & Scrim
+            'm3shadow', 'm3scrim',
+        ]
+        
+        # Tambah terminal colors
+        color_keys.extend([f'term{i}' for i in range(16)])
+        
+        rows_per_variant = (len(color_keys) + colors_per_row - 1) // colors_per_row
+        variant_height = header_height + (rows_per_variant * cell_height)
+        
+        # Total image size
+        img_width = cell_width * colors_per_row
+        img_height = len(variants) * (variant_height + variant_spacing)
+        
+        # Create image
+        img = Image.new('RGB', (img_width, img_height), '#1a1a1a')
+        draw = ImageDraw.Draw(img)
+        
+        # Try load font - lebih kecil
+        try:
+            font = ImageFont.truetype("/usr/share/fonts/TTF/DejaVuSans-Bold.ttf", 12)
+        except:
+            try:
+                font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 12)
+            except:
+                font = ImageFont.load_default()
+        
+        # Generate untuk setiap variant
+        for v_idx, variant in enumerate(variants):
+            y_offset = v_idx * (variant_height + variant_spacing)
+            
+            # Generate scheme untuk variant ini
+            current_mode = self.mode
+            self.generate_scheme(mode=current_mode, variant=variant)
+            colors = self._extract_colors()
+            
+            # Draw header - lebih rapat
+            draw.text((5, y_offset + 3), f"{variant} ({current_mode})", 
+                    fill='white', font=font)
+            
+            # Draw colors
+            for c_idx, color_key in enumerate(color_keys):
+                if color_key not in colors:
+                    continue
+                
+                col = c_idx % colors_per_row
+                row = c_idx // colors_per_row
+                
+                x = col * cell_width
+                y = y_offset + header_height + (row * cell_height)
+                
+                # Convert to RGB
+                color_value = colors[color_key]
+                if isinstance(color_value, int):
+                    hex_color = hex_from_argb(color_value)
+                else:
+                    hex_color = color_value
+                
+                color_clean = hex_color.replace('#', '')
+                rgb = tuple(int(color_clean[j:j+2], 16) for j in (0, 2, 4))
+                
+                # Draw rectangle
+                draw.rectangle([x, y, x + cell_width, y + cell_height], 
+                            fill=rgb, outline='#ddd')
+        
+        # Save
+        if output_path is None:
+            output_dir = Path.home() / ".config" / "m3-colors" / "sample"
+            output_dir.mkdir(parents=True, exist_ok=True)
+            wallpaper_name = Path(self.wallpaper_path).stem
+            output_path = output_dir / f"{wallpaper_name}_all_variants.png"
+        
+        img.save(output_path)
+        print(f"All variants preview saved: {output_path}")
         
         return str(output_path)
 
