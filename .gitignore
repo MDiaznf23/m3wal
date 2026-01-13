@@ -26,10 +26,15 @@ wheels/
 # Project specific
 output/
 wallpapers/
+# Ignore images EXCEPT in screenshots folder
 *.jpg
 *.jpeg
 *.png
 *.webp
+!screenshots/*.jpg
+!screenshots/*.jpeg
+!screenshots/*.png
+!screenshots/*.webp
 
 # IDE
 .vscode/
@@ -44,4 +49,4 @@ Thumbs.db
 
 # User configs (don't commit personal configs)
 m3-colors/
-.cache/
+.cache//
