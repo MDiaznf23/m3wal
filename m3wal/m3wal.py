@@ -32,7 +32,7 @@ class M3Color:
         # Default config
         defaults = {
             'mode': 'auto',
-            'variant': 'CONTENT',
+            'variant': 'auto',
             'brightness_threshold': '128',
             'operation_mode': 'full',  
             'templates_dir': 'templates',
@@ -125,11 +125,69 @@ class M3Color:
 
         return {"brightness": avg_brightness, "mode": self.mode}
 
+    def auto_select_variant(self):
+        """Auto-select best variant - IMPROVED VERSION"""
+        import colorsys
+        from PIL import Image
+        import numpy as np
+        
+        # Analyze wallpaper
+        img = Image.open(self.wallpaper_path)
+        img = img.resize((100, 100))
+        pixels = np.array(img)
+        
+        # Flatten untuk analysis
+        if len(pixels.shape) == 3:
+            if pixels.shape[2] == 4:  # RGBA
+                pixels = pixels[:, :, :3]  # Drop alpha
+            pixels = pixels.reshape(-1, 3)
+        
+        # Calculate metrics
+        saturations = []
+        values = []
+        hues = []
+        
+        for r, g, b in pixels[:1000]:
+            h, s, v = colorsys.rgb_to_hsv(r/255, g/255, b/255)
+            saturations.append(s)
+            values.append(v)
+            hues.append(h)
+        
+        # Metrics
+        avg_sat = np.mean(saturations)
+        avg_val = np.mean(values)
+        sat_std = np.std(saturations)
+        hue_std = np.std(hues)
+        
+        # Decision logic
+        if avg_sat < 0.10:
+            return "MONOCHROME", f"Grayscale wallpaper (sat={avg_sat:.2f})"
+        
+        if avg_sat < 0.30 and sat_std < 0.20:
+            return "NEUTRAL", f"Muted colors (sat={avg_sat:.2f}, consistent tone)"
+        
+        if avg_sat > 0.40 and hue_std > 0.25:
+            return "EXPRESSIVE", f"Diverse colors (sat={avg_sat:.2f}, hue_variety={hue_std:.2f})"
+        
+        if 0.25 < avg_sat < 0.50 and sat_std < 0.25:
+            return "FIDELITY", f"Natural colors (sat={avg_sat:.2f}, preserve original)"
+        
+        if avg_sat > 0.60:
+            return "VIBRANT", f"Bold colors (sat={avg_sat:.2f})"
+        
+        return "CONTENT", f"Balanced (sat={avg_sat:.2f}, safe choice)"
+
     def generate_scheme(self, mode=None, variant="CONTENT"):
         """Generate Material 3 color scheme"""
         if mode:
             self.mode = mode
 
+        # Auto-select variant if requested
+        if variant.upper() == "AUTO":
+            variant, reason = self.auto_select_variant()
+            print(f"[AUTO] Selected variant: {variant}")
+            print(f"[AUTO] Reason: {reason}")
+        
         self.variant = variant
 
         # Map string to Variant enum
@@ -254,7 +312,7 @@ class M3Color:
                 "term3": scheme.on_primary_fixed_variant,
                 "term4": scheme.on_primary,
                 "term5": scheme.surface_container_highest,
-                "term6": scheme.primary_container,
+                "term6": scheme.secondary_container,
                 "term7": scheme.inverse_primary,
                 "term8": scheme.inverse_surface,
                 "term9": scheme.error,
@@ -971,8 +1029,8 @@ def main():
                             help='Color scheme mode (overrides config)')
     color_group.add_argument('--variant', '-v',
                             choices=['TONALSPOT', 'VIBRANT', 'EXPRESSIVE', 'NEUTRAL', 
-                                    'FIDELITY', 'CONTENT', 'MONOCHROME'],
-                            help='Material 3 variant (overrides config)')
+                                    'FIDELITY', 'CONTENT', 'MONOCHROME', 'AUTO'],
+                            help='Material 3 variant (use AUTO for auto-detection, overrides config)')
 
     # Execution modes
     mode_group = parser.add_argument_group('execution modes')

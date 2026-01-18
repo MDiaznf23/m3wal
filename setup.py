@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="m3wal",
-    version="1.1.3",
+    version="1.1.4",
     packages=find_packages(),
     package_data={
         'm3wal': ['templates/*.template'],  # Include templates
