@@ -738,11 +738,16 @@ class M3WAL(M3Color):
             output_dir = Path.home() / ".cache" / "m3-colors"
 
         if templates_dir is None:
+            config_path = Path.home() / ".config" / "m3-colors" / "templates"
+            
             try:
-                from importlib.resources import files
-                templates_dir = files('m3wal').joinpath('templates')
+                if not config_path.exists():
+                    from importlib.resources import files
+                    templates_dir = files('m3wal').joinpath('templates')
+                else:
+                    templates_dir = config_path
             except:
-                templates_dir = Path.home() / ".config" / "m3-colors" / "templates"
+                templates_dir = config_path
         
         templates_path = Path(templates_dir)
         output_path = Path(output_dir)
