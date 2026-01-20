@@ -7,11 +7,11 @@
 </p>
 
 <p align="center">
-  <img src="screenshots/demo-2.png" alt="M3WAL Palette 1" width="800">
+  <img src="screenshots/demo-2.png" alt="M3WAL Palette 2" width="800">
 </p>
 
 <p align="center">
-  <img src="screenshots/demo-3.png" alt="M3WAL Palette 1" width="800">
+  <img src="screenshots/demo-3.png" alt="M3WAL Palette 3" width="800">
 </p>
 
 
@@ -21,15 +21,15 @@ Generate beautiful Material 3 color schemes from your wallpapers and apply them 
 
 - Extract Material 3 color schemes from any wallpaper
 - Auto-detect light/dark mode based on wallpaper brightness
-- 7 Material Color Variants (Content, Vibrant, Expressive, etc.)
+- 7 Material Color Variants (Content, Vibrant, Expressive, etc.) + AUTO variant
 - Export to multiple formats (JSON, CSS)
-- Template system for custom config generation
+- **Smart template system** with bundled templates and custom override support
 - **Two operation modes:** Generator-only or Full ricing mode
 - Automatic wallpaper setting with `feh`
 - Deploy configs to multiple applications automatically
-- **Parallel template processing** for faster execution
+- **Parallel template processing** for faster execution (ThreadPoolExecutor with 4 workers)
 - **RGB color format support** for KDE and other applications
-- **Hook scripts system** for custom actions
+- **Hook scripts system** for custom actions with environment variables
 - **Improved terminal color contrast** for light mode
 - **GTK theme reloading** via gsettings and xsettingsd
 
@@ -73,6 +73,9 @@ m3wal wallpaper.jpg --generator-only
 # Full mode (apply all configurations)
 m3wal wallpaper.jpg --full
 
+# Auto-select best variant based on wallpaper
+m3wal wallpaper.jpg --variant AUTO
+
 # Specify mode and variant
 m3wal wallpaper.jpg --mode dark --variant VIBRANT
 ```
@@ -95,6 +98,7 @@ m3wal <wallpaper_path> [options]
 | `--full` | `-f` | Apply all configurations (ricing mode) |
 
 **Variants:**
+- `AUTO` - **NEW!** Automatically selects best variant based on wallpaper analysis
 - `CONTENT` (default) - Based on wallpaper content
 - `VIBRANT` - More saturated colors
 - `EXPRESSIVE` - Maximum chroma
@@ -103,9 +107,31 @@ m3wal <wallpaper_path> [options]
 - `FIDELITY` - Closest to source color
 - `MONOCHROME` - Grayscale palette
 
+### AUTO Variant Selection
+
+The `AUTO` variant intelligently analyzes your wallpaper to select the best color variant:
+
+```bash
+m3wal wallpaper.jpg --variant AUTO
+```
+
+**Selection Logic:**
+- **MONOCHROME** - For grayscale wallpapers (saturation < 0.10)
+- **NEUTRAL** - For muted, consistent tones (saturation < 0.30, low variance)
+- **EXPRESSIVE** - For diverse, colorful images (saturation > 0.40, high hue variety)
+- **FIDELITY** - For natural color palettes (saturation 0.25-0.50, consistent)
+- **VIBRANT** - For bold, saturated wallpapers (saturation > 0.60)
+- **CONTENT** - Default safe choice for balanced images
+
+The AUTO selection will print the chosen variant and reasoning:
+```
+[AUTO] Selected variant: VIBRANT
+[AUTO] Reason: Bold colors (sat=0.68)
+```
+
 ### Operation Modes
 
-M3WAL now supports two operation modes:
+M3WAL supports two operation modes:
 
 #### 1. Generator Mode (`--generator-only` or `-g`)
 Only generates color schemes without applying them to your system:
@@ -145,7 +171,7 @@ Config file: `~/.config/m3-colors/m3-colors.conf`
 ```ini
 [General]
 mode = auto
-variant = CONTENT
+variant = AUTO
 brightness_threshold = 128
 operation_mode = full  # 'generator' or 'full'
 
@@ -164,26 +190,57 @@ create_symlink = true
 [PostScript]
 script_path = m3wal-post.sh
 
-[Hook.Scripts]
-enabled = true
-scripts = reload-apps.sh, notify.sh
+[Hooks]
 scripts_dir = ~/.config/m3-colors/hooks
+
+[Hook.Scripts]
+enabled = false
+scripts = eww.sh
 ```
 
-**New Configuration Options:**
+**Configuration Options:**
 
 - `operation_mode`: Default operation mode when no flag is specified
   - `generator`: Only generate colors
   - `full`: Generate and apply (default)
 
+- `variant`: Can now be set to `AUTO` for automatic variant selection
+
 - **Hook Scripts:** Custom scripts that run with color environment variables
-  - Enable with `[Hook.Scripts]` section
-  - Scripts receive all colors as environment variables (e.g., `$M3_PRIMARY`)
+  - Enable with `[Hook.Scripts] enabled = true`
+  - Scripts receive all colors as environment variables (e.g., `$M3_M3PRIMARY`)
   - Access metadata: `$M3_MODE`, `$M3_WALLPAPER`
 
-### Templates
+### Templates System
 
-Create custom templates in `~/.config/m3-colors/templates/`
+M3WAL now features a **smart template system** with bundled templates and custom override support.
+
+#### Template Loading Priority:
+
+1. **Bundled Templates** (shipped with m3wal package) - loaded as fallback
+2. **Custom Templates** (`~/.config/m3-colors/templates/`) - override bundled templates
+3. **Specified Directory** (via `--templates-dir` argument) - highest priority
+
+**How it works:**
+
+```bash
+# Uses bundled templates + custom overrides
+m3wal wallpaper.jpg --full
+
+# Found 15 bundled template(s)
+# Found 3 custom template(s)
+# Using custom override: kitty.conf.template
+# Using custom override: i3.config.template
+```
+
+**Custom templates with the same name will override bundled templates**, allowing you to:
+- Use bundled templates out-of-the-box
+- Customize only specific templates you need
+- Keep your modifications while getting new bundled templates in updates
+
+#### Creating Custom Templates
+
+Create templates in `~/.config/m3-colors/templates/`
 
 **Example template** (`myapp.conf.template`):
 
@@ -195,6 +252,10 @@ accent={{m3secondary}}
 
 # RGB format (for KDE)
 background_rgb={{m3surface_rgb}}
+
+# Metadata
+wallpaper={{wallpaper_path}}
+mode={{mode}}
 ```
 
 **Available color variables:**
@@ -238,6 +299,8 @@ Configure deployment in `~/.config/m3-colors/deploy.json`:
 }
 ```
 
+The `source` field refers to the **output filename** (template name without `.template` extension).
+
 ### Hook Scripts
 
 Create custom hook scripts in `~/.config/m3-colors/hooks/`:
@@ -269,6 +332,8 @@ Enable hook scripts in config:
 [Hook.Scripts]
 enabled = true
 scripts = reload-apps.sh, notify.sh
+
+[Hooks]
 scripts_dir = ~/.config/m3-colors/hooks
 ```
 
@@ -283,31 +348,32 @@ killall -USR1 kitty
 i3-msg reload
 ```
 
-The difference between **Hook Scripts** and **Post Script**:
-- **Hook Scripts**: Run with color environment variables, multiple scripts supported
+**Difference between Hook Scripts and Post Script:**
+- **Hook Scripts**: Run with color environment variables, multiple scripts supported, enable/disable per script
 - **Post Script**: Single script, runs at the end, no environment variables
 
 ## Output Files
 
-Generated files are saved in two locations:
+Generated files are saved in multiple locations:
 
 ### `~/.config/m3-colors/output/`
-- `{wallpaper}_{variant}_scheme.json` - Full color scheme
-- `{wallpaper}_{variant}_scheme.css` - CSS variables
+- `{wallpaper}_{variant}_scheme.json` - Full color scheme in JSON
+- `{wallpaper}_{variant}_scheme.css` - CSS variables for web projects
 
 ### `~/.config/m3-colors/sample/`
-- `{wallpaper}_{variant}_palette.png` - Visual palette preview (16x grid)
+- `{wallpaper}_{variant}_palette.png` - Visual palette preview (16-column grid)
+- `{wallpaper}_all_variants.png` - **NEW!** Preview of all 7 variants in one image
 
 ### `~/.cache/m3-colors/`
-- Template-generated config files
+- Template-generated config files (output from templates)
 - Deployed to applications via deploy.json
 
 ### `~/.config/m3-colors/`
-- `current_wallpaper` - Symlink to current wallpaper
+- `current_wallpaper` - Symlink to currently active wallpaper
 
 ## Supported Applications
 
-Out of the box templates for:
+Out-of-the-box bundled templates for:
 
 - **Terminals:** Kitty, Alacritty, TTY
 - **WM/DE:** i3, Polybar, Waybar, Dunst
@@ -317,6 +383,8 @@ Out of the box templates for:
 - **Themes:** GTK 2/3/4, KDE
 - **X11:** Xresources
 
+**You can override any bundled template** by creating a file with the same name in `~/.config/m3-colors/templates/`.
+
 ## Python API
 
 ```python
@@ -325,18 +393,31 @@ from m3wal import M3WAL, M3Color
 # Generator mode (M3Color class)
 m3 = M3Color("wallpaper.jpg")
 analysis = m3.analyze_wallpaper()
-colors = m3.generate_scheme(mode="dark", variant="VIBRANT")
+
+# Auto-select variant
+variant, reason = m3.auto_select_variant()
+print(f"Selected: {variant}, Reason: {reason}")
+
+# Generate scheme
+colors = m3.generate_scheme(mode="dark", variant="AUTO")
 m3.export_json(variant="VIBRANT")
 m3.export_css(variant="VIBRANT")
 m3.generate_palette_preview()
+
+# Generate all variants preview
+m3.generate_all_variants_preview()
 
 # Full mode (M3WAL class - extends M3Color)
 m3wal = M3WAL("wallpaper.jpg")
 m3wal.analyze_wallpaper()
 m3wal.generate_scheme(mode="dark", variant="CONTENT")
 
-# Apply to all templates (parallel processing)
+# Apply to all templates (parallel processing with fallback system)
+# Automatically uses bundled templates + custom overrides
 generated_files = m3wal.apply_all_templates()
+
+# Or specify custom templates directory
+generated_files = m3wal.apply_all_templates(templates_dir="/path/to/templates")
 
 # Deploy configs
 m3wal.deploy_configs()
@@ -363,59 +444,94 @@ m3wal.run_post_script()
 ## Examples
 
 ```bash
-# Auto mode with content variant (uses config default)
-m3wal ~/Pictures/sunset.jpg
+# Auto mode with AUTO variant (intelligent selection)
+m3wal ~/Pictures/sunset.jpg --variant AUTO
 
 # Generator-only mode (no system changes)
 m3wal ~/Pictures/sunset.jpg -g
 
-# Full mode with dark theme and vibrant colors
-m3wal ~/Pictures/landscape.jpg --full --mode dark --variant VIBRANT
+# Full mode with dark theme and auto-selected variant
+m3wal ~/Pictures/landscape.jpg --full --mode dark --variant AUTO
 
 # Light mode with expressive variant
 m3wal ~/Pictures/abstract.jpg -f -m light -v EXPRESSIVE
 
-# Auto-detect mode, apply everything
-m3wal ~/Pictures/wallpaper.jpg --full
+# Auto-detect everything
+m3wal ~/Pictures/wallpaper.jpg --full --variant AUTO
 ```
 
 ## How It Works
 
 ### Generator Mode Flow:
 1. **Analyze** wallpaper brightness to determine light/dark mode
-2. **Extract** dominant colors using Material Color Utilities
-3. **Generate** complete Material 3 color scheme (50+ colors)
-4. **Export** JSON and CSS files to `~/.config/m3-colors/output/`
-5. **Create** visual palette preview (16-color grid)
+2. **Auto-select variant** (if `AUTO` is specified) based on saturation, hue variety, and color characteristics
+3. **Extract** dominant colors using Material Color Utilities
+4. **Generate** complete Material 3 color scheme (50+ colors + 16 terminal colors)
+5. **Export** JSON and CSS files to `~/.config/m3-colors/output/`
+6. **Create** visual palette preview (16-column grid, dynamic rows)
 
 ### Full Mode Flow:
 1. All generator mode steps
-2. **Apply** colors to all templates (parallel processing with ThreadPoolExecutor)
-3. **Deploy** configs to target applications via deploy.json
-4. **Reload** GTK themes (gsettings + xsettingsd)
-5. **Execute** hook scripts with color environment variables
-6. **Apply** Xresources with xrdb
-7. **Set** wallpaper with feh
-8. **Create** symlink to current wallpaper
-9. **Run** post script for additional actions
+2. **Load templates** with smart fallback system:
+   - Load bundled templates (from package)
+   - Load custom templates (override bundled if same name)
+   - Load from specified directory (highest priority)
+3. **Apply** colors to all templates (parallel processing with ThreadPoolExecutor, 4 workers)
+4. **Deploy** configs to target applications via deploy.json
+5. **Reload** GTK themes (gsettings + xsettingsd)
+6. **Execute** hook scripts with color environment variables
+7. **Apply** Xresources with xrdb
+8. **Set** wallpaper with feh
+9. **Create** symlink to current wallpaper
+10. **Run** post script for additional actions
 
 ## Performance Improvements
 
-- **Parallel template processing:** Uses ThreadPoolExecutor with up to 4 workers for I/O-bound tasks
-- **Single color extraction:** Colors are extracted once and reused across all operations
+- **Parallel template processing:** Uses ThreadPoolExecutor with 4 workers for I/O-bound tasks
+- **Smart template loading:** Single pass through template directories with deduplication
+- **Single color extraction:** Colors extracted once and reused across all operations
 - **Efficient RGB conversion:** RGB values pre-calculated and cached with `_rgb` suffix
 - **Optimized palette preview:** 16-column grid layout with dynamic row calculation
+- **Bundled templates:** No need to copy templates manually, works out-of-the-box
+
+## Template System Details
+
+### Bundled Templates
+M3WAL ships with pre-configured templates for popular applications. These are loaded automatically from the package.
+
+### Custom Templates
+Place your custom templates in `~/.config/m3-colors/templates/`. Files with the same name as bundled templates will override them.
+
+### Template Discovery Flow:
+```
+1. Load bundled templates (fallback)
+   └─> Found 15 bundled template(s)
+
+2. Load custom templates (override)
+   └─> Found 3 custom template(s)
+   └─> Using custom override: kitty.conf.template
+
+3. Load specified directory (highest priority)
+   └─> Using specified directory: /path/to/templates
+```
+
+### Benefits:
+- ✅ Works out-of-the-box with bundled templates
+- ✅ Customize only what you need
+- ✅ Keep custom modifications across updates
+- ✅ Easy to share custom templates
+- ✅ No manual template copying required
 
 ## Terminal Colors
 
-The terminal color mapping has been improved for better contrast:
+Terminal color mapping optimized for both modes:
 
-**Dark Mode:** Uses original high-contrast mapping
-**Light Mode:** Enhanced with better visibility:
+**Dark Mode:** High-contrast mapping for readability
+**Light Mode:** Enhanced visibility with proper contrast:
 - `term0`: Surface container (background)
-- `term1-6`: Primary, secondary, and tertiary variants
+- `term1-6`: Primary, secondary, tertiary variants
 - `term7`: On surface variant (foreground)
-- `term8-15`: Accent colors with proper contrast
+- `term8-15`: Accent colors with adequate contrast
 
 ## GTK Theme Reloading
 
@@ -424,27 +540,49 @@ M3WAL automatically reloads GTK themes using two methods:
 1. **gsettings:** Toggles GTK theme to trigger reload
 2. **xsettingsd:** Restarts xsettingsd daemon with new config
 
-This ensures GTK applications pick up theme changes without restart.
+This ensures GTK applications pick up theme changes without manual restart.
 
 ## Troubleshooting
 
 ### Templates not found
-Ensure templates exist in `~/.config/m3-colors/templates/`
+**Solution:** M3WAL now ships with bundled templates, so this should rarely occur. If you want custom templates, create them in `~/.config/m3-colors/templates/`.
+
+### No templates loaded
+**Solution:** Check if package is properly installed:
+```bash
+pip install --upgrade m3wal
+```
+
+### Custom template not being used
+**Solution:** Ensure the filename matches exactly (including `.template` extension). Check output:
+```
+Using custom override: kitty.conf.template
+```
 
 ### Wallpaper not setting
-Check if `feh` is installed: `which feh`
+**Solution:** Check if `feh` is installed: `which feh`
 
 ### GTK theme not reloading
+**Solution:** 
 1. Check if xsettingsd config exists: `~/.config/xsettingsd/xsettingsd.conf`
 2. Verify xsettingsd is installed: `which xsettingsd`
 3. Check gsettings: `gsettings get org.gnome.desktop.interface gtk-theme`
 
 ### Hook scripts not running
+**Solution:**
 1. Ensure scripts have execute permission: `chmod +x ~/.config/m3-colors/hooks/*.sh`
 2. Enable in config: `[Hook.Scripts] enabled = true`
 3. Check script paths in config
+4. Verify scripts are listed: `scripts = reload-apps.sh, notify.sh`
+
+### AUTO variant not selecting expected variant
+**Solution:** The AUTO selection is based on saturation and hue analysis. You can:
+1. Check the selection reason in output: `[AUTO] Reason: ...`
+2. Manually specify a variant if needed: `--variant VIBRANT`
+3. Adjust the wallpaper or try a different image
 
 ### Operation mode confusion
+**Solution:**
 - Use `--generator-only` for color generation only
 - Use `--full` for complete rice setup
 - Or set default in config: `operation_mode = generator` or `full`
@@ -452,6 +590,13 @@ Check if `feh` is installed: `which feh`
 ## Contributing
 
 Contributions welcome! Please feel free to submit a Pull Request.
+
+**Areas for contribution:**
+- New bundled templates for popular applications
+- Improved AUTO variant selection algorithm
+- Additional export formats
+- Performance optimizations
+- Documentation improvements
 
 ## License
 
