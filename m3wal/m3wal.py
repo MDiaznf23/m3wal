@@ -730,36 +730,61 @@ class M3WAL(M3Color):
         super().__init__(wallpaper_path, config)
 
     def apply_all_templates(self, templates_dir=None, output_dir=None):
-        """Apply colors to all templates - OPTIMIZED VERSION"""
+        """Apply colors to all templates - OPTIMIZED VERSION with fallback"""
         if not self.theme:
             raise ValueError("Generate scheme first!")
-
+        
         if output_dir is None:
             output_dir = Path.home() / ".cache" / "m3-colors"
-
-        if templates_dir is None:
-            config_path = Path.home() / ".config" / "m3-colors" / "templates"
-            
-            try:
-                if not config_path.exists():
-                    from importlib.resources import files
-                    templates_dir = files('m3wal').joinpath('templates')
-                else:
-                    templates_dir = config_path
-            except:
-                templates_dir = config_path
         
-        templates_path = Path(templates_dir)
+        # ===== TEMPLATE DISCOVERY WITH FALLBACK =====
+        config_path = Path.home() / ".config" / "m3-colors" / "templates"
+        
+        # Get bundled templates path
+        try:
+            from importlib.resources import files
+            bundled_path = files('m3wal').joinpath('templates')
+        except:
+            bundled_path = None
+        
+        # Collect templates from both locations
+        template_files = {}  # Use dict to avoid duplicates, custom overrides bundled
+        
+        # 1. Load bundled templates first (as fallback)
+        if bundled_path and Path(bundled_path).exists():
+            for template_file in Path(bundled_path).glob("*.template"):
+                template_files[template_file.name] = template_file
+            print(f"Found {len(template_files)} bundled template(s)")
+        
+        # 2. Load custom templates (overrides bundled if same name)
+        if config_path.exists():
+            custom_count = 0
+            for template_file in config_path.glob("*.template"):
+                if template_file.name in template_files:
+                    print(f"Using custom override: {template_file.name}")
+                template_files[template_file.name] = template_file
+                custom_count += 1
+            if custom_count > 0:
+                print(f"Found {custom_count} custom template(s)")
+        
+        # 3. Check if user specified custom directory
+        if templates_dir is not None:
+            templates_path = Path(templates_dir)
+            if templates_path.exists():
+                for template_file in templates_path.glob("*.template"):
+                    template_files[template_file.name] = template_file
+                print(f"Using specified directory: {templates_dir}")
+        
+        # Convert back to list
+        template_list = list(template_files.values())
+        
+        if not template_list:
+            print("No template files found!")
+            return []
+        
         output_path = Path(output_dir)
         output_path.mkdir(parents=True, exist_ok=True)
-
-        # Find all template files
-        template_files = list(templates_path.glob("*.template"))
-
-        if not template_files:
-            print(f"No template files found in {templates_dir}/")
-            return []
-
+        
         # ===== OPTIMIZATION: Extract colors ONCE =====
         colors = self._extract_colors()
         
@@ -771,7 +796,7 @@ class M3WAL(M3Color):
             if isinstance(self.source_color, int)
             else self.source_color
         )
-
+        
         # ===== OPTIMIZATION: Process templates in parallel =====
         from concurrent.futures import ThreadPoolExecutor, as_completed
         
@@ -797,17 +822,17 @@ class M3WAL(M3Color):
                 
             except Exception as e:
                 return (False, template_file.name, str(e))
-
+        
         generated_files = []
         
-        print(f"\nApplying colors to {len(template_files)} templates...")
+        print(f"\nApplying colors to {len(template_list)} templates...")
         
-        # Process with ThreadPoolExecutor (max 4 workers untuk I/O bound tasks)
+        # Process with ThreadPoolExecutor (max 4 workers for I/O bound tasks)
         with ThreadPoolExecutor(max_workers=4) as executor:
             # Submit all tasks
             future_to_template = {
                 executor.submit(process_template, tf): tf 
-                for tf in template_files
+                for tf in template_list
             }
             
             # Collect results as they complete
@@ -819,7 +844,7 @@ class M3WAL(M3Color):
                     print(f"✓ {name} → {result}")
                 else:
                     print(f"✗ {name}: {result}")
-
+        
         return generated_files
 
     def create_wallpaper_symlink(self):
