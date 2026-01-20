@@ -3,15 +3,15 @@
 > Material 3 Wallpaper-based Color Scheme Generator
 
 <p align="center">
-  <img src="screenshots/demo-1.png" alt="M3WAL Palette 1" width="800">
+  <img src="https://raw.githubusercontent.com/MDiaznf23/m3wal/main/screenshots/demo-1.png" alt="M3WAL Palette 1" width="800">
 </p>
 
 <p align="center">
-  <img src="screenshots/demo-2.png" alt="M3WAL Palette 2" width="800">
+  <img src="https://raw.githubusercontent.com/MDiaznf23/m3wal/main/screenshots/demo-2.png" alt="M3WAL Palette 2" width="800">
 </p>
 
 <p align="center">
-  <img src="screenshots/demo-3.png" alt="M3WAL Palette 3" width="800">
+  <img src="https://raw.githubusercontent.com/MDiaznf23/m3wal/main/screenshots/demo-3.png" alt="M3WAL Palette 3" width="800">
 </p>
 
 

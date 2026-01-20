@@ -7,7 +7,7 @@ long_description = (this_directory / "README.md").read_text(encoding='utf-8')
 
 setup(
     name="m3wal",
-    version="1.1.7",
+    version="1.1.8",
     packages=find_packages(),
     package_data={
         'm3wal': ['templates/*.template'],
