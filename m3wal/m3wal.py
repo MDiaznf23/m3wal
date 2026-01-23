@@ -328,7 +328,7 @@ class M3Color:
             return {
                 "term0": scheme.surface_container_highest,  
                 "term1": scheme.error,                       
-                "term2": scheme.on_tertiary_fixed_variant,                
+                "term2": scheme.on_tertiary_fixed_variant,              
                 "term3": scheme.on_secondary_fixed_variant,          
                 "term4": scheme.primary,                  
                 "term5": scheme.secondary,                
@@ -340,7 +340,7 @@ class M3Color:
                 "term11": scheme.on_primary_fixed_variant,
                 "term12": scheme.on_primary_container,    
                 "term13": scheme.on_secondary_container,     
-                "term14": scheme.primary_fixed_dim,                                                  
+                "term14": scheme.primary_fixed_dim,
                 "term15": scheme.surface_dim,                
             }
 
@@ -939,41 +939,6 @@ class M3WAL(M3Color):
                 except Exception as e:
                     print(f"✗ Failed: {e}")
 
-    def reload_gtk_theme(self):
-        """Reload GTK theme using xsettingsd"""
-        import subprocess
-        import shutil
-        from pathlib import Path
-        
-        # Method 1: gsettings 
-        theme_name = "FlatColor"
-        try:
-            # Toggle theme untuk trigger reload
-            subprocess.run(["gsettings", "set", "org.gnome.desktop.interface", "gtk-theme", "Adwaita"], 
-                        stderr=subprocess.DEVNULL)
-            subprocess.run(["gsettings", "set", "org.gnome.desktop.interface", "gtk-theme", theme_name],
-                        stderr=subprocess.DEVNULL)
-            print("Reloaded theme via gsettings")
-        except:
-            pass
-        
-        # Method 2: Restart xsettingsd
-        if shutil.which("xsettingsd"):
-            try:
-                # Kill xsettingsd lama
-                subprocess.run(["pkill", "-x", "xsettingsd"], stderr=subprocess.DEVNULL)
-                # Wait a second
-                import time
-                time.sleep(0.2)
-                # Start xsettingsd baru TANPA timeout, biarkan running
-                xsettingsd_config = str(Path.home() / ".config" / "xsettingsd" / "xsettingsd.conf")
-                subprocess.Popen(["xsettingsd", "-c", xsettingsd_config],
-                            stdout=subprocess.DEVNULL,
-                            stderr=subprocess.DEVNULL)
-                print("Reloaded theme via xsettingsd")
-            except Exception as e:
-                print(f"Failed to reload xsettingsd: {e}")
-
     def run_post_script(self, script_path=None):
         """Run post-generation script"""
         import subprocess
@@ -1154,9 +1119,6 @@ def main():
         # Deploy configs
         print("\n[RICING] Deploying configs...")
         m3wal.deploy_configs()
-        
-        print("\n[RICING] Reloading GTK theme...")
-        m3wal.reload_gtk_theme()
         
         # Run hook script
         print("\n[RICING] Run Hook Scripts...")

@@ -31,7 +31,7 @@ Generate beautiful Material 3 color schemes from your wallpapers and apply them 
 - **RGB color format support** for KDE and other applications
 - **Hook scripts system** for custom actions with environment variables
 - **Improved terminal color contrast** for light mode
-- **GTK theme reloading** via gsettings and xsettingsd
+- **Flexible theme management** via post scripts and hooks
 
 ## Installation
 
@@ -58,8 +58,8 @@ pip install material-color-utilities Pillow
 **Optional system dependencies:**
 - `feh` - for setting wallpapers
 - `xrdb` - for applying Xresources
-- `xsettingsd` - for GTK theme reloading
-- `gsettings` - for GNOME/GTK theme management
+- `xsettingsd` - for GTK theme reloading (via post script)
+- `gsettings` - for GNOME/GTK theme management (via post script)
 
 ## Quick Start
 
@@ -152,7 +152,6 @@ Generates colors AND applies them system-wide:
 - All generator mode features
 - Applies colors to all templates
 - Deploys configs to applications
-- Reloads GTK themes
 - Runs hook scripts
 - Applies Xresources
 - Sets wallpaper with feh
@@ -343,14 +342,49 @@ Add custom actions in `~/.config/m3-colors/m3wal-post.sh`:
 
 ```bash
 #!/bin/bash
+
+# Reload GTK theme (optional)
+pkill xsettingsd
+xsettingsd &
+
 # Reload applications
 killall -USR1 kitty
 i3-msg reload
+
+# Notify user
+notify-send "Theme Applied" "M3WAL theme updated"
 ```
 
 **Difference between Hook Scripts and Post Script:**
 - **Hook Scripts**: Run with color environment variables, multiple scripts supported, enable/disable per script
-- **Post Script**: Single script, runs at the end, no environment variables
+- **Post Script**: Single script, runs at the end, no environment variables, good for simple reload commands
+
+## GTK Theme Management
+
+M3WAL generates GTK theme configuration files, but leaves theme reloading to your post script for maximum flexibility. You can handle GTK theme reloading in `m3wal-post.sh`:
+
+**Example GTK reload in post script:**
+
+```bash
+#!/bin/bash
+
+# Method 1: Using xsettingsd (recommended)
+pkill xsettingsd
+xsettingsd &
+
+# Method 2: Using gsettings (GNOME/GTK)
+# Toggle theme to force reload
+CURRENT_THEME=$(gsettings get org.gnome.desktop.interface gtk-theme)
+gsettings set org.gnome.desktop.interface gtk-theme 'Adwaita'
+gsettings set org.gnome.desktop.interface gtk-theme "$CURRENT_THEME"
+
+# Method 3: Both methods
+pkill xsettingsd
+xsettingsd &
+gsettings set org.gnome.desktop.interface gtk-theme 'FlatColor'
+```
+
+This approach allows you to customize the reload behavior based on your setup.
 
 ## Output Files
 
@@ -422,9 +456,6 @@ generated_files = m3wal.apply_all_templates(templates_dir="/path/to/templates")
 # Deploy configs
 m3wal.deploy_configs()
 
-# Reload GTK theme
-m3wal.reload_gtk_theme()
-
 # Run hook scripts
 m3wal.run_hook_scripts()
 
@@ -478,12 +509,11 @@ m3wal ~/Pictures/wallpaper.jpg --full --variant AUTO
    - Load from specified directory (highest priority)
 3. **Apply** colors to all templates (parallel processing with ThreadPoolExecutor, 4 workers)
 4. **Deploy** configs to target applications via deploy.json
-5. **Reload** GTK themes (gsettings + xsettingsd)
-6. **Execute** hook scripts with color environment variables
-7. **Apply** Xresources with xrdb
-8. **Set** wallpaper with feh
-9. **Create** symlink to current wallpaper
-10. **Run** post script for additional actions
+5. **Execute** hook scripts with color environment variables
+6. **Apply** Xresources with xrdb
+7. **Set** wallpaper with feh
+8. **Create** symlink to current wallpaper
+9. **Run** post script for additional actions (including GTK reload if configured)
 
 ## Performance Improvements
 
@@ -516,11 +546,11 @@ Place your custom templates in `~/.config/m3-colors/templates/`. Files with the 
 ```
 
 ### Benefits:
-- ✅ Works out-of-the-box with bundled templates
-- ✅ Customize only what you need
-- ✅ Keep custom modifications across updates
-- ✅ Easy to share custom templates
-- ✅ No manual template copying required
+- Works out-of-the-box with bundled templates
+- Customize only what you need
+- Keep custom modifications across updates
+- Easy to share custom templates
+- No manual template copying required
 
 ## Terminal Colors
 
@@ -532,15 +562,6 @@ Terminal color mapping optimized for both modes:
 - `term1-6`: Primary, secondary, tertiary variants
 - `term7`: On surface variant (foreground)
 - `term8-15`: Accent colors with adequate contrast
-
-## GTK Theme Reloading
-
-M3WAL automatically reloads GTK themes using two methods:
-
-1. **gsettings:** Toggles GTK theme to trigger reload
-2. **xsettingsd:** Restarts xsettingsd daemon with new config
-
-This ensures GTK applications pick up theme changes without manual restart.
 
 ## Troubleshooting
 
@@ -562,11 +583,19 @@ Using custom override: kitty.conf.template
 ### Wallpaper not setting
 **Solution:** Check if `feh` is installed: `which feh`
 
-### GTK theme not reloading
+### GTK theme not applying
 **Solution:** 
-1. Check if xsettingsd config exists: `~/.config/xsettingsd/xsettingsd.conf`
-2. Verify xsettingsd is installed: `which xsettingsd`
-3. Check gsettings: `gsettings get org.gnome.desktop.interface gtk-theme`
+1. Ensure GTK theme files are generated in `~/.cache/m3-colors/`
+2. Add GTK theme reload commands to your `m3wal-post.sh`:
+   ```bash
+   pkill xsettingsd
+   xsettingsd &
+   ```
+3. Or use hook scripts for more control
+4. For GNOME/GTK, you can use gsettings:
+   ```bash
+   gsettings set org.gnome.desktop.interface gtk-theme 'YourThemeName'
+   ```
 
 ### Hook scripts not running
 **Solution:**
@@ -586,6 +615,13 @@ Using custom override: kitty.conf.template
 - Use `--generator-only` for color generation only
 - Use `--full` for complete rice setup
 - Or set default in config: `operation_mode = generator` or `full`
+
+### Post script not executing
+**Solution:**
+1. Check if script exists: `~/.config/m3-colors/m3wal-post.sh`
+2. Ensure it has execute permission: `chmod +x ~/.config/m3-colors/m3wal-post.sh`
+3. Verify `run_post_script` is enabled in config
+4. Check script path in config: `[PostScript] script_path = m3wal-post.sh`
 
 ## Contributing
 
